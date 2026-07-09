@@ -8,6 +8,7 @@ Cada diretório contém código executável, testes e instruções de execução
 | Área | Tema | Código |
 | --- | --- | --- |
 | Concorrência | Goroutines não são threads | [`season-0/concurrency/01-goroutines-not-threads`](season-0/concurrency/01-goroutines-not-threads) |
+| Concorrência | Context: timeout, cancelamento e propagação | [`season-0/concurrency/02-context-timeout-cancel`](season-0/concurrency/02-context-timeout-cancel) |
 
 ## Requisitos
 
