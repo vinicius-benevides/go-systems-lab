@@ -16,3 +16,11 @@ type GreetingResult struct {
 	GeneratedAt string `json:"generatedAt"`
 	Attempt     int32  `json:"attempt"`
 }
+
+// GreetingStatus is exposed through a Workflow Query. It is intentionally a
+// snapshot: querying a Workflow must not alter its durable state.
+type GreetingStatus struct {
+	Phase   string          `json:"phase"`
+	Result  *GreetingResult `json:"result,omitempty"`
+	Failure string          `json:"failure,omitempty"`
+}

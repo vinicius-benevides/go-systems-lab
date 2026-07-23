@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/vinicius-benevides/go-systems-lab/season-0/temporal/01-temporal-go-lab/internal/activities"
 	"github.com/vinicius-benevides/go-systems-lab/season-0/temporal/01-temporal-go-lab/internal/model"
+	"github.com/vinicius-benevides/go-systems-lab/season-0/temporal/01-temporal-go-lab/internal/shared"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 )
 
@@ -15,8 +17,9 @@ func TestGreetingWorkflow(t *testing.T) {
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(activities.ComposeGreeting, activity.RegisterOptions{Name: shared.ComposeGreetingActivityName})
 	env.OnActivity(
-		activities.ComposeGreeting,
+		shared.ComposeGreetingActivityName,
 		mock.Anything,
 		mock.MatchedBy(func(input model.GreetingInput) bool {
 			return input.Name == "Ada" && input.Language == "pt-BR"
@@ -35,6 +38,18 @@ func TestGreetingWorkflow(t *testing.T) {
 	}
 	if result.Message != "Olá, Ada!" || result.Attempt != 1 {
 		t.Fatalf("GreetingWorkflow() result = %#v, want successful greeting", result)
+	}
+
+	queryResult, err := env.QueryWorkflow(shared.GreetingStatusQuery)
+	if err != nil {
+		t.Fatalf("QueryWorkflow() error = %v", err)
+	}
+	var status model.GreetingStatus
+	if err := queryResult.Get(&status); err != nil {
+		t.Fatalf("query result Get() error = %v", err)
+	}
+	if status.Phase != "completed" || status.Result == nil || status.Result.Message != result.Message {
+		t.Fatalf("status = %#v, want completed status with result", status)
 	}
 }
 
@@ -55,6 +70,16 @@ func TestGreetingWorkflowRejectsInvalidInput(t *testing.T) {
 			name:  "negative delay",
 			input: model.GreetingInput{Name: "Ada", DelaySeconds: -1},
 			want:  "delay seconds cannot be negative",
+		},
+		{
+			name:  "unsupported language",
+			input: model.GreetingInput{Name: "Ada", Language: "es"},
+			want:  "unsupported language",
+		},
+		{
+			name:  "delay above the activity contract",
+			input: model.GreetingInput{Name: "Ada", DelaySeconds: 61},
+			want:  "delay seconds cannot exceed 60",
 		},
 	}
 
