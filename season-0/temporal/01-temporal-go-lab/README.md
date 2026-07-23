@@ -23,6 +23,10 @@ Temporal Service ── task queue: greeting-task-queue ──► worker
   espera para a Activity;
 - falhas transitórias da Activity são retentadas até três vezes, com backoff
   exponencial.
+- a Activity emite heartbeats enquanto trabalha, o que permite ao Temporal
+  detectar Workers que pararam no meio de uma operação longa;
+- o Workflow expõe uma Query de status, sem modificar o seu estado durante a
+  consulta.
 
 ## Requisitos
 
@@ -34,6 +38,16 @@ comandos abaixo. Por exemplo, com a CLI do Temporal:
 
 ```bash
 temporal server start-dev
+```
+
+Por padrão, o projeto usa `localhost:7233`, namespace `default` e a Task Queue
+`greeting-task-queue`. Para conectar a outro ambiente, configure as mesmas
+variáveis no `starter` e no `worker`:
+
+```bash
+export TEMPORAL_ADDRESS="temporal.example.internal:7233"
+export TEMPORAL_NAMESPACE="training"
+export TEMPORAL_TASK_QUEUE="greeting-training"
 ```
 
 ## Executar
@@ -86,10 +100,31 @@ concluir na segunda tentativa e imprimir `Activity try: 2`.
 | Flag | Padrão | Descrição |
 | --- | --- | --- |
 | `-name` | `Vinícius` | Nome obrigatório da saudação. |
-| `-language` | `pt-BR` | `en` ou `english` selecionam a mensagem em inglês; os demais valores usam português. |
-| `-delay` | `2` | Duração simulada da Activity em segundos. `0` usa o padrão da Activity (2 s); valores negativos são rejeitados. |
+| `-language` | `pt-BR` | `pt-BR`/`pt` ou `en`/`english`. Outros valores são rejeitados antes de chamar a Activity. |
+| `-delay` | `2` | Duração simulada da Activity em segundos. `0` usa 2 s; o intervalo aceito é de 0 a 60 s. |
 | `-simulate-failure` | `false` | Faz a primeira tentativa da Activity falhar. |
 | `-workflow-id` | gerado | Identificador do Workflow; use um valor explícito para rastreá-lo no Temporal. |
+| `-wait-timeout` | `0` | Máximo para o cliente esperar o resultado. `0` espera indefinidamente; expirar não cancela o Workflow. |
+
+## Acompanhar uma execução
+
+Os tipos registrados usam nomes explícitos e versionados (`greeting.v1` e
+`greeting.compose.v1`). Assim, um refactor do nome da função Go não muda o
+contrato que o Temporal grava no histórico.
+
+Enquanto o Workflow estiver em execução, sua Query `greeting.status` retorna
+uma estrutura com a fase (`running`, `completed` ou `failed`) e, quando
+disponível, o resultado. A Query pode ser feita pela API do SDK ou pela UI do
+Temporal. Para experimentar o comportamento assíncrono, inicie-o com um tempo
+curto de espera:
+
+```bash
+go run ./season-0/temporal/01-temporal-go-lab/cmd/starter \
+  -name "Ada" -delay 30 -wait-timeout 1s
+```
+
+O starter retorna após um segundo, mas a execução durável continua no servidor
+e pode ser inspecionada na Temporal UI pelo Workflow ID exibido.
 
 ## Estrutura
 
@@ -119,3 +154,8 @@ Código de Workflow pode ser reexecutado pelo Temporal durante um replay. Evite
 nele chamadas diretas a relógio do sistema, I/O, rede, goroutines e APIs não
 determinísticas; coloque esse trabalho em Activities. Alterações incompatíveis
 em Workflows já executados exigem estratégia de versionamento antes do deploy.
+
+Este laboratório já separa os nomes versionados do código Go, mas uma mudança
+na lógica de decisão de um Workflow que possua históricos em aberto ainda deve
+usar versionamento de Workflow (por exemplo, `workflow.GetVersion`) e um plano
+de migração antes de chegar a produção.

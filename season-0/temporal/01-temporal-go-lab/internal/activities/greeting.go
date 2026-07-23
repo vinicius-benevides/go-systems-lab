@@ -37,14 +37,8 @@ func ComposeGreeting(ctx context.Context, input model.GreetingInput) (model.Gree
 		delay = defaultDelaySeconds
 	}
 
-	timer := time.NewTimer(time.Duration(delay) * time.Second)
-	defer timer.Stop()
-
-	select {
-	case <-timer.C:
-		// The simulated external work has completed.
-	case <-ctx.Done():
-		return model.GreetingResult{}, ctx.Err()
+	if err := waitWithHeartbeat(ctx, time.Duration(delay)*time.Second); err != nil {
+		return model.GreetingResult{}, err
 	}
 
 	message := buildMessage(input.Name, input.Language)
@@ -61,6 +55,30 @@ func ComposeGreeting(ctx context.Context, input model.GreetingInput) (model.Gree
 	)
 
 	return result, nil
+}
+
+// waitWithHeartbeat represents a long-running external operation. Heartbeats
+// let Temporal observe liveness and preserve a last-known progress detail if a
+// Worker disappears while processing the Activity.
+func waitWithHeartbeat(ctx context.Context, delay time.Duration) error {
+	deadline := time.NewTimer(delay)
+	defer deadline.Stop()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	activity.RecordHeartbeat(ctx, "greeting composition started")
+	for {
+		select {
+		case <-deadline.C:
+			activity.RecordHeartbeat(ctx, "greeting composition completed")
+			return nil
+		case <-ticker.C:
+			activity.RecordHeartbeat(ctx, "greeting composition in progress")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func buildMessage(name, language string) string {
